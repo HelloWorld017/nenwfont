@@ -1,4 +1,5 @@
 __pycache__
 pipeline.yml
-files/**/*
-!files/**/.gitkeep
+/files/**
+!/files/*/
+!/files/*/.gitkeep
