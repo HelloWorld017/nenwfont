@@ -84,7 +84,7 @@ class CFFToGlyfNode(Node):
             if font_item.font.sfntVersion != 'OTTO':
                 continue
 
-            print("Converting CFF to glyf: %s" % font['file_name'])
+            print("Converting CFF to glyf: %s" % font_item['file_name'])
             otf_to_ttf(font_item.font, post_format=post_format, max_err=max_err)
 
         return input_fonts

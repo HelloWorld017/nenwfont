@@ -14,7 +14,7 @@ class InputNode(Node):
             glob_patterns = [ glob_patterns ]
 
         for glob_pattern in glob_patterns:
-            for path in glob(glob_pattern):
-                input_fonts.append(Font(path, TTFont(path)))
+            for path in glob(glob_pattern, recursive=True):
+                input_fonts.append(Font(self.program, path, TTFont(path)))
 
         return input_fonts

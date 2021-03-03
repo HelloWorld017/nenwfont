@@ -1,5 +1,6 @@
 from collections import Counter
 from fontTools.subset import Subsetter
+from fontTools.ttLib import TTFont
 from functools import cmp_to_key
 from nenwfont.node import Node
 from os import path
@@ -145,7 +146,20 @@ def get_group(group_name):
 
 
 def order_wikipedia_frequency():
-    pass
+    freq_pattern = re.compile(r"^'.*?'\t(\d+)\t(\d+)$", re.M)
+
+    with open("./assets/wikipedia_frequency.txt", 'r', encoding='utf-8') as file:
+        freq_raw = file.read()
+
+        frequency = {
+            chr(int(match.group(1))): int(match.group(2))
+            for index, match in enumerate(blocks_pattern.finditer(blocks_raw))
+        }
+
+    def wikipedia_frequency(char):
+        return frequency[char] if char in frequency else 0
+
+    return wikipedia_frequency
 
 
 def order_default():
@@ -184,7 +198,7 @@ def get_order(order_name):
 
 
 def build_unicode_range(chars):
-    range = []
+    ranges = []
     range_start = ord(chars[0])
     range_end = range_start
 
@@ -193,15 +207,15 @@ def build_unicode_range(chars):
 
         if code_point != range_end + 1:
             if range_start == range_end:
-                ranges.push('U+%X' % range_start)
+                ranges.append('U+%X' % range_start)
 
             else:
-                ranges.push('U+%x-%x' % (range_start, range_end))
+                ranges.append('U+%x-%x' % (range_start, range_end))
 
         else:
             range_end += 1
 
-    return ','.join(range)
+    return ','.join(ranges)
 
 
 class SubsetNode(Node):
@@ -213,8 +227,12 @@ class SubsetNode(Node):
         order_by = options.get('order_by', 'default')
         max_chunk_size = options.get('max_chunk_size', 256)
 
-        group_by = [ get_group(group_name) for group_name in group_by ]
-        order_by = [ get_order(order_name) for order_name in order_by ]
+        if not isinstance(order_by, dict):
+            order_by = { group_name: order_by for group_name in group_by }
+
+        group_by = { group_name: get_group(group_name) for group_name in group_by }
+        orders = { order_key: get_order(order_key) for order_key in set(order_by.values()) }
+        order_by = { group_name: orders[order_key] for group_name, order_key in order_by.items() }
         output_fonts = []
 
         for font in input_fonts:
@@ -223,30 +241,43 @@ class SubsetNode(Node):
             for char_code, glyph_name in font.font['cmap'].getBestCmap().items():
                 char = chr(char_code)
 
-                for index, group in enumerate(group_by):
+                for group_name, group in group_by.items():
                     inner_index = group(char)
                     if inner_index is None:
                         continue
 
-                    group_key = "%d_%d" % (index, inner_index)
+                    group_key = (group_name, inner_index)
                     if group_key not in groups:
                         groups[group_key] = []
 
                     groups[group_key].append(char)
                     break
 
+            for (group_name, inner_index), group_chars in list(groups.items()):
+                group_chars.sort(key=order_by[group_name])
+
+                i = 0
+                while len(group_chars) > max_chunk_size:
+                    groups[(group_name, inner_index, i)] = group_chars[:max_chunk_size]
+                    i += 1
+
+                    del group_chars[:max_chunk_size]
+
             filename = path.splitext(path.basename(font['path']))[0]
+            cloned_font = font.clone()
+            font.font.close()
+            cloned_font.font.close()
+
             for index, chars in enumerate(groups.values()):
                 text = ''.join(chars)
-
-                cloned_font = font.clone()
+                target_font = font.clone(TTFont(cloned_font['cloned_path']))
 
                 print("Subsetting %s: Chunk %d" % (font['file_name'], index))
                 subsetter = Subsetter()
                 subsetter.populate(text=text)
-                subsetter.subset(cloned_font.font)
+                subsetter.subset(target_font.font)
 
-                cloned_font['unicode_range'] = build_unicode_range(chars)
-                output_fonts.append(cloned_font)
+                target_font['unicode_range'] = build_unicode_range(chars)
+                output_fonts.append(target_font)
 
         return output_fonts

@@ -1,9 +1,11 @@
 from copy import deepcopy
 from fontTools.ttLib import TTFont
 import os
+import uuid
 
 class Font:
-    def __init__(self, path, font):
+    def __init__(self, program, path, font):
+        self.program = program
         self.font = font
         self.attributes = {
             'path': path,
@@ -37,14 +39,24 @@ class Font:
     def __setitem__(self, key, item):
         self.attributes[key] = item
 
-    def clone(self):
-        new_font = TTFont(self['path'])
-        for modified_key, modified_table in self.font.tables.items():
-            new_font[modified_key] = deepcopy(modified_table)
+    def clone(self, new_font=None):
+        if new_font is None:
+            print("Saving temporary font: %s" % self['file_name'])
+            new_path = os.path.join(
+                self.program.config.get('clone_directory', 'files/temp'),
+                "%s.ttf" % uuid.uuid4()
+            )
+            self.program.temp_files.append(new_path)
+
+            self.font.flavor = None
+            self.font.save(new_path)
+
+            new_font = TTFont(new_path)
 
         new_attributes = self.attributes.copy()
+        new_attributes['cloned_path'] = new_path
 
-        output = Font(new_path, new_attributes)
+        output = Font(self.program, self['path'], new_font)
         output.attributes = new_attributes
 
         return output

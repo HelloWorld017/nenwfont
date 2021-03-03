@@ -1,3 +1,4 @@
+from nenwfont.node import Node
 import re
 
 
