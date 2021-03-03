@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>((title))</title>
+
+		<script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.x.x/dist/alpine.min.js" defer></script>
+		<link rel="stylesheet" href="((stylesheet))">
+		<style>
+			.App {
+				display: flex;
+				flex-direction: column;
+				max-width: 1440px;
+				margin: 0 auto;
+				padding-top: 50px;
+				padding-bottom: 50px;
+			}
+
+			.App__typefaces {
+				display: grid;
+				grid-template-columns: 1fr 1fr 1fr;
+				grid-column-gap: 10px;
+			}
+
+			.App__title,
+			.App__section,
+			.App__preferences {
+				font-family: var(--default-font);
+			}
+
+			.App__input {
+				display: flex;
+				flex-direction: column;
+				font-weight: 700;
+				margin: 10px 0;
+			}
+
+			.App__sample {
+				border: none;
+				font-family: var(--default-font);
+				background: #f1f1f1;
+				border-radius: 10px;
+				margin: 0 10px;
+				margin-top: 10px;
+				min-height: 5rem;
+				padding: 10px;
+				outline: none;
+			}
+
+			.App__slider {
+				margin: 0 10px;
+				margin-top: 10px;
+			}
+
+			.Typeface__sample {
+				white-space: pre-line;
+			}
+
+			@media (max-width: 1280px) {
+				.App__typefaces {
+					grid-template-columns: 1fr 1fr;
+				}
+			}
+
+			@media (max-width: 768px) {
+				.App__typefaces {
+					grid-template-columns: 1fr;
+				}
+			}
+		</style>
+	</head>
+
+	<body>
+		<div
+			class="App"
+			x-data="app"
+			:style="`--default-font: '${fonts[0]}'`"
+		>
+			<h1 class="App__title">Font Preview</h1>
+
+			<h2 class="App__section">Preferences</h2>
+			<div class="App__preferences">
+				<label class="App__input">
+					Sample Text
+					<textarea class="App__sample" x-model="sample"></textarea>
+				</label>
+
+				<label class="App__input">
+					Font Size
+					<input type="range" class="App__slider" x-model="size" min="4" max="64"></textarea>
+				</label>
+			</div>
+
+			<h2 class="App__section">Typefaces</h2>
+			<div class="App__typefaces">
+				<template x-for="name in fonts" :key="name">
+					<div class="Typeface" :style="`font-family: '${name}'`">
+						<h3 class="Typeface__name" x-text="name"></h3>
+						<div class="Typeface__sample" x-text="sample" :style="`font-size: ${size}px`"></div>
+					</div>
+				</template>
+			</div>
+		</div>
+
+		<script id="FontTest__default-sample" type="text/plain">
+			雨上がり　傘を捨てて
+			아메 아가리 카사오 스테테
+			비가 그치고 우산을 내려
+
+			羽ばたく夢を 見たんだ
+			하바타쿠 유메오 미탄다
+			날갯짓하는 꿈을 봤어
+
+			虹の先の未来へ！
+			니지노 사키노 미라이에
+			무지개 앞의 미래로!
+		</script>
+
+		<script>
+			const app = {
+				fonts: ((fonts)),
+
+				sample: document
+					.querySelector('#FontTest__default-sample')
+					.textContent
+					.split(/\r?\n/)
+					.slice(1, -1)
+					.reduce(([ output, indent ], text) => {
+						if (indent === null) {
+							indent = text.match(/^(\s*)/)[1];
+						}
+
+						output.push(text.replace(indent, ''));
+						return [ output, indent ];
+					}, [ [], null ])[0]
+					.join('\n'),
+
+				size: 14
+			};
+		</script>
+	</body>
+</html>
