@@ -6,6 +6,7 @@ from .merge import MergeNode
 from .output import OutputNode
 from .parse_attribute import ParseAttributeNode
 from .replace_attribute import ReplaceAttributeNode
+from .set_attribute import SetAttributeNode
 from .set_font_name import SetFontNameNode
 from .subset import SubsetNode
 
@@ -18,6 +19,7 @@ nodes = [
     OutputNode,
     ParseAttributeNode,
     ReplaceAttributeNode,
+    SetAttributeNode,
     SetFontNameNode,
     SubsetNode
 ]

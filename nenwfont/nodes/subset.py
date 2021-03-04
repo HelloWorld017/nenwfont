@@ -81,7 +81,7 @@ def group_hangul_2574():
     return hangul_2574
 
 
-def group_unicode_blocks():
+def group_unicode_blocks(block=None):
     blocks_pattern = re.compile(r"^([0-9A-F]+)..([0-9A-F]+);\s*(.*)$", re.M)
 
     with open("./assets/blocks.txt", "r", encoding="utf-8") as file:
@@ -139,8 +139,13 @@ def get_group(group_name):
         'all': group_all
     }
 
-    if group_name in groups:
-        return groups[group_name]()
+    group_key, group_arg = group_name.split(':')
+
+    if group_key in groups:
+        if group_arg:
+            return groups[group_key](group_arg)
+
+        return groups[group_key]()
 
     return group_generic(group_name)
 
@@ -153,7 +158,7 @@ def order_wikipedia_frequency():
 
         frequency = {
             chr(int(match.group(1))): int(match.group(2))
-            for index, match in enumerate(blocks_pattern.finditer(blocks_raw))
+            for index, match in enumerate(freq_pattern.finditer(freq_raw))
         }
 
     def wikipedia_frequency(char):
@@ -212,6 +217,8 @@ def build_unicode_range(chars):
             else:
                 ranges.append('U+%x-%x' % (range_start, range_end))
 
+            range_start = code_point
+            range_end = code_point
         else:
             range_end += 1
 
@@ -225,10 +232,13 @@ class SubsetNode(Node):
     def transform(self, input_fonts, options):
         group_by = options.get('group_by', [ 'all' ])
         order_by = options.get('order_by', 'default')
+        min_chunk_size = options.get('min_chunk_size', 8)
         max_chunk_size = options.get('max_chunk_size', 256)
 
         if not isinstance(order_by, dict):
-            order_by = { group_name: order_by for group_name in group_by }
+            default_order = order_by
+            order_by = { group_name: default_order for group_name in group_by }
+            order_by['merged_chunks'] = default_order
 
         group_by = { group_name: get_group(group_name) for group_name in group_by }
         orders = { order_key: get_order(order_key) for order_key in set(order_by.values()) }
@@ -253,6 +263,17 @@ class SubsetNode(Node):
                     groups[group_key].append(char)
                     break
 
+            for group_key, group_chars in list(groups.items()):
+                if len(group_chars) >= min_chunk_size:
+                    continue
+
+                del groups[group_key]
+
+                if ('merged_chunks', 0) not in groups:
+                    groups[('merged_chunks', 0)] = []
+
+                groups[('merged_chunks', 0)].extend(group_chars)
+
             for (group_name, inner_index), group_chars in list(groups.items()):
                 group_chars.sort(key=order_by[group_name])
 
@@ -263,7 +284,10 @@ class SubsetNode(Node):
 
                     del group_chars[:max_chunk_size]
 
-            filename = path.splitext(path.basename(font['path']))[0]
+            basename = path.basename(font['path'])
+            dirname = path.dirname(font['path'])
+            filename, extname = path.splitext(basename)
+
             cloned_font = font.clone()
             font.font.close()
             cloned_font.font.close()
@@ -277,7 +301,12 @@ class SubsetNode(Node):
                 subsetter.populate(text=text)
                 subsetter.subset(target_font.font)
 
-                target_font['unicode_range'] = build_unicode_range(chars)
+                target_font['original_path'] = target_font['path']
+                target_font['original_file_name'] = target_font['file_name']
+                target_font['unicode_range'] = build_unicode_range(list(sorted(chars)))
+                target_font['group_index'] = str(index)
+                target_font['path'] = "%s/%s-%d%s" % (dirname, filename, index, extname)
+                target_font['file_name'] = "%s-%d%s" % (filename, index, extname)
                 output_fonts.append(target_font)
 
         return output_fonts

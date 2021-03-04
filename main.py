@@ -1,4 +1,5 @@
 from nenwfont.nodes import nodes_map
+import os
 
 class Program:
     def __init__(self, config):
@@ -72,15 +73,15 @@ if __name__ == '__main__':
         print("=" * 30 + " (with %d Fonts)" % len(fonts))
         print("Cleaning Up!")
         for font in fonts:
-            font.close()
-        
+            font.font.close()
+
         program.cleanup()
 
         print("Finished!")
 
         print("Fonts:")
         for font in fonts:
-            print("\t%s" % font['family_name'])
+            print("\t%s" % font['file_name'])
 
     with open('pipeline.yml') as f:
         config = yaml.load(f, Loader=yaml.SafeLoader)
@@ -89,4 +90,16 @@ if __name__ == '__main__':
     program.add_callback('before_transform', before_transform_hook)
     program.add_callback('after_transform', after_transform_hook)
     program.add_callback('after_process', after_process_hook)
+
+    if config.get('debug_pipeline', False):
+        def debug_after_transform_hook(pipe, fonts):
+            for font in fonts:
+                print("[Font %s]" % font['file_name'])
+                for key, value in font.attributes.items():
+                    print("\t%s: %s" % (key, value))
+
+                print()
+
+        program.add_callback('after_transform', debug_after_transform_hook)
+
     program.process()

@@ -20,7 +20,7 @@ class table__n_e_n_w(DefaultTable):
         pipeline_length = struct.unpack('>L', data[:4])
         data = data[4:]
 
-        self.pipeline = data[:pipeline_length].decode().split(',')
+        self.pipelines = data[:pipeline_length].decode().split(',')
         data = data[pipeline_length:]
 
         assert not data
@@ -28,7 +28,7 @@ class table__n_e_n_w(DefaultTable):
     def compile(self, ttFont):
         version = self.version
         date = math.floor(time.time() / (24 * 3600))
-        pipeline = ','.join(self.pipeline)
+        pipeline = ','.join(self.pipelines)
 
         return struct.pack('>HLL', version, date, len(pipeline)) + pipeline.encode()
 
@@ -41,8 +41,8 @@ class AddProgramInfoNode(Node):
         add_pipeline = options.get('add_pipeline', False)
 
         for font in input_fonts:
-            font['nenw'] = table__n_e_n_w()
+            font.font['nenw'] = table__n_e_n_w()
             if add_pipeline:
-                font['nenw'].pipeline = [ node.name for node in self.program.pipeline ]
+                font.font['nenw'].pipeline = [ node.name for node in self.program.pipeline ]
 
         return input_fonts

@@ -15,7 +15,9 @@ class Font:
             'family_name': self.get_name(1),
             'subfamily_name': self.get_name(2),
             'full_name': self.get_name(4),
-            'postscript_name': self.get_name(6)
+            'postscript_name': self.get_name(6),
+            'typographic_family_name': self.get_name(16),
+            'typographic_subfamily_name': self.get_name(17)
         }
 
     def get_name(self, name_id):
@@ -31,7 +33,7 @@ class Font:
         return self.font['OS/2'].usWeightClass
 
     def __contains__(self, key):
-        return key in self.attributes
+        return key in self.attributes and self.attributes[key] is not None
 
     def __getitem__(self, key):
         return self.attributes[key]
@@ -40,6 +42,8 @@ class Font:
         self.attributes[key] = item
 
     def clone(self, new_font=None):
+        new_attributes = self.attributes.copy()
+
         if new_font is None:
             print("Saving temporary font: %s" % self['file_name'])
             new_path = os.path.join(
@@ -52,9 +56,7 @@ class Font:
             self.font.save(new_path)
 
             new_font = TTFont(new_path)
-
-        new_attributes = self.attributes.copy()
-        new_attributes['cloned_path'] = new_path
+            new_attributes['cloned_path'] = new_path
 
         output = Font(self.program, self['path'], new_font)
         output.attributes = new_attributes

@@ -1,7 +1,9 @@
 from datetime import datetime
 from fontTools.ttLib import sfnt
 from nenwfont.node import Node
+import json
 import os
+import posixpath
 
 
 class OutputNode(Node):
@@ -14,6 +16,7 @@ class OutputNode(Node):
         output_preview = options.get('output_preview', None)
         with_zopfli = options.get('with_zopfli', True)
         extensions = options.get('extensions', [ 'woff', 'woff2' ])
+        family_key = options.get('family_key', 'family_name')
 
         if with_zopfli:
             sfnt.USE_ZOPFLI = True
@@ -21,33 +24,41 @@ class OutputNode(Node):
         stylesheets = []
 
         for font in input_fonts:
+            print("Exporting %s..." % font['file_name'])
+
             stylesheet = {
-                'font-family': font['family_name'],
+                'font-family': font[family_key],
                 'src': []
             }
 
             self.add_css_rules(font, stylesheet, [
                 ('weight', 'font-weight'),
-                ('unicode_range', 'unicode-range')
+                ('unicode_range', 'unicode-range'),
                 ('style', 'font-style'),
                 ('display', 'font-display'),
                 ('stretch', 'font-stretch'),
-                ('variant', 'font-variant')
+                ('variant', 'font-variant'),
                 ('feature_settings', 'font-feature-settings'),
-                ('variation_settings', 'font-variation-settings'),
+                ('variation_settings', 'font-variation-settings')
             ])
 
             for extension in extensions:
-                output_dest = output_fonts.format(**font.attributes, ext=extension)
-                relative_dest = os.path.relpath(output_css, output_dest)
+                output_dest = output_fonts.format(
+                    **font.attributes,
+                    ext=extension,
+                    root=os.path.splitext(font['file_name'])[0]
+                )
 
-                self.output_table[extension](output_dest, relative_dest, font, stylesheet)
+                relative_dest = posixpath.relpath(output_dest, os.path.dirname(output_css))
+                self.output_table[extension](output_dest, relative_dest, font.font, stylesheet)
 
             stylesheets.append(stylesheet)
 
+        print("Exporting stylesheets...")
         self.output_css(output_css, stylesheets)
 
         if output_preview:
+            print("Exporting preview...")
             self.make_preview(output_preview, output_css, input_fonts)
 
         return input_fonts
@@ -58,14 +69,14 @@ class OutputNode(Node):
 
         replace_map = {
             'title': "Generated at %s" % datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'stylesheet': os.path.relpath(path, stylesheet_path),
-            'fonts': json.dumps([ font.full_name for font in fonts ])
+            'stylesheet': posixpath.relpath(stylesheet_path, os.path.dirname(path)),
+            'fonts': json.dumps([ font['full_name'] for font in fonts ])
         }
 
         for key, value in replace_map.items():
             template = template.replace('((%s))' % key, value)
 
-        with open(path, encoding="utf-8") as f:
+        with open(path, 'w', encoding="utf-8") as f:
             f.write(template)
 
     def output_woff2(self, path, relative_path, font, stylesheet):
@@ -111,12 +122,12 @@ class OutputNode(Node):
             stylesheet_text += \
                 '@font-face{' + \
                     'font-family:"%s";' % stylesheet['font-family'] + \
-                    'src:%s;' % stylesheet['src'].join(',')
+                    'src:%s;' % ','.join(stylesheet['src'])
 
             del stylesheet['font-family']
             del stylesheet['src']
 
-            for property_key, property_value in stylesheet:
+            for property_key, property_value in stylesheet.items():
                 stylesheet_text += '%s:%s;' % (property_key, property_value)
 
             stylesheet_text += '}'
