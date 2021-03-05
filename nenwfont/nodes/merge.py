@@ -3,6 +3,7 @@ from functools import reduce
 from fontTools.merge import Merger
 from nenwfont.font import Font
 from nenwfont.node import Node
+import os
 import re
 
 class CustomMerger(Merger):
@@ -140,13 +141,16 @@ class MergeNode(Node):
 
             merger = CustomMerger()
             output_ttfont = merger.merge(fonts)
-            output_path = output_template.format(**base_font.attributes)
+            output_filename = output_template.format(**base_font.attributes)
+            output_path = "%s/%s" % (os.path.dirname(base_font['path']), output_filename)
 
             if line_metrics == 'override':
                 set_line_metrics(output_ttfont, base_metrics)
 
             output_font = Font(self.program, output_path, output_ttfont)
             output_font.attributes = base_font.attributes.copy()
+            output_font['file_name'] = output_filename
+            output_font['path'] = output_path
             output_fonts.append(output_font)
 
         return output_fonts
