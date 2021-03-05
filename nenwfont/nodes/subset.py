@@ -1,13 +1,13 @@
 from collections import Counter
 from fontTools.subset import Subsetter
 from fontTools.ttLib import TTFont
-from functools import cmp_to_key
+from functools import cmp_to_key, lru_cache
 from nenwfont.node import Node
 from os import path
 import json
 import re
 
-def group_ideograph_frequency():
+def group_ideograph_frequency(options):
     with open("./assets/unihan/kFrequency.json", "r", encoding="utf-8") as file:
         k_frequency = json.load(file)
 
@@ -20,7 +20,7 @@ def group_ideograph_frequency():
     return ideograph_frequency
 
 
-def group_ideograph_strokes():
+def group_ideograph_strokes(options):
     with open("./assets/unihan/kTotalStrokes.json", "r", encoding="utf-8") as file:
         k_total_strokes = json.load(file)
 
@@ -33,7 +33,7 @@ def group_ideograph_strokes():
     return ideograph_strokes
 
 
-def group_ideograph_jouyou():
+def group_ideograph_jouyou(options):
     with open("./assets/unihan/kJoyoKanji.json", "r", encoding="utf-8") as file:
         k_joyo_kanji = json.load(file)
 
@@ -46,7 +46,7 @@ def group_ideograph_jouyou():
     return ideograph_jouyou
 
 
-def group_hangul_2350():
+def group_hangul_2350(options):
     with open("./assets/ksx1001.txt", "r", encoding="utf-8") as file:
         ksx1001 = file.read().strip()
 
@@ -62,7 +62,7 @@ def group_hangul_2350():
     return hangul_2350
 
 
-def group_hangul_2574():
+def group_hangul_2574(options):
     with open("./assets/ksx1001.txt", "r", encoding="utf-8") as file:
         ksx1001 = file.read().strip()
 
@@ -81,41 +81,75 @@ def group_hangul_2574():
     return hangul_2574
 
 
-def group_unicode_blocks(block=None):
+def group_unicode_blocks(options):
     blocks_pattern = re.compile(r"^([0-9A-F]+)..([0-9A-F]+);\s*(.*)$", re.M)
+    excluded = options.get('exclude', [])
+    included = options.get('include', None)
 
     with open("./assets/blocks.txt", "r", encoding="utf-8") as file:
         blocks_raw = file.read()
 
-    blocks = [
+    all_blocks = [
         {
             'start': int(match.group(1), 16),
             'end': int(match.group(2), 16),
+            'name': match.group(3),
             'index': index
         }
 
         for index, match in enumerate(blocks_pattern.finditer(blocks_raw))
     ]
 
+    if included is not None:
+        enabled_blocks = [
+            block for block in all_blocks if block['name'] in included
+        ]
+
+    else:
+        enabled_blocks = [
+            block for block in all_blocks if block['name'] not in excluded
+        ]
+
     def unicode_blocks(char):
         char_point = ord(char)
-        for block in blocks:
+        for block in enabled_blocks:
             if block['start'] <= char_point <= block['end']:
                 return block['index']
 
-        return len(blocks)
+        return None
 
     return unicode_blocks
 
 
-def group_all():
-    def all(char):
-        return 0
+def group_unicode_range(options):
+    range_pattern = re.compile(r"^U+([0-9A-F]+)-([0-9A-F]+)$")
+    ranges = options.get('ranges', [ options.get('range') ])
 
-    return all
+    ranges_parsed = [
+        {
+            'start': int(match.group(1), 16),
+            'end': int(match.group(2), 16),
+            'index': index
+        }
+
+        for index, match in enumerate([
+            match for range in ranges for match in range_pattern.finditer(range)
+        ])
+    ]
+
+    def unicode_range(char):
+        char_point = ord(char)
+        for range in ranges_parsed:
+            if range['start'] <= char_point <= range['end']:
+                return range['index']
+
+        return None
+
+    return unicode_range
 
 
-def group_generic(filename):
+def group_file(options):
+    filename = options['filename']
     with open(filename, 'r', encoding='utf-8') as file:
         group_content = file.read()
 
@@ -128,7 +162,14 @@ def group_generic(filename):
     return generic
 
 
-def get_group(group_name):
+def group_all(options):
+    def all(char):
+        return 0
+
+    return all
+
+
+def get_group(group_key, group_args):
     groups = {
         'ideograph_frequency': group_ideograph_frequency,
         'ideograph_strokes': group_ideograph_strokes,
@@ -136,18 +177,13 @@ def get_group(group_name):
         'hangul_2350': group_hangul_2350,
         'hangul_2574': group_hangul_2574,
         'unicode_blocks': group_unicode_blocks,
-        'all': group_all
+        'file': group_file
     }
 
-    group_key, group_arg = group_name.split(':')
-
     if group_key in groups:
-        if group_arg:
-            return groups[group_key](group_arg)
+        return groups[group_key](group_args)
 
-        return groups[group_key]()
-
-    return group_generic(group_name)
+    return group_all(group_args)
 
 
 def order_wikipedia_frequency():
@@ -190,6 +226,7 @@ def order_generic(filename):
     return cmp_to_key(generic)
 
 
+@lru_cache()
 def get_order(order_name):
     orders = {
         'wikipedia_frequency': order_wikipedia_frequency,
@@ -215,7 +252,7 @@ def build_unicode_range(chars):
                 ranges.append('U+%X' % range_start)
 
             else:
-                ranges.append('U+%x-%x' % (range_start, range_end))
+                ranges.append('U+%X-%X' % (range_start, range_end))
 
             range_start = code_point
             range_end = code_point
@@ -230,19 +267,25 @@ class SubsetNode(Node):
     updates_fonts = True
 
     def transform(self, input_fonts, options):
-        group_by = options.get('group_by', [ 'all' ])
-        order_by = options.get('order_by', 'default')
+        group_by_args = options.get('group_by', [ 'all' ])
+        default_order = options.get('order_by', 'default')
         min_chunk_size = options.get('min_chunk_size', 8)
         max_chunk_size = options.get('max_chunk_size', 256)
 
-        if not isinstance(order_by, dict):
-            default_order = order_by
-            order_by = { group_name: default_order for group_name in group_by }
-            order_by['merged_chunks'] = default_order
+        group_by = []
+        for group in group_by_args:
+            is_dict = isinstance(group, dict)
+            group_name = group['name'] if is_dict else group
+            group_args = group if is_dict else {}
+            group_fn = get_group(group_name, group_args)
+            group_order = group_args.get('order_by', default_order)
+            group_by.append({
+                'name': group_name,
+                'args': group_args,
+                'order': get_order(group_order),
+                'function': group_fn
+            })
 
-        group_by = { group_name: get_group(group_name) for group_name in group_by }
-        orders = { order_key: get_order(order_key) for order_key in set(order_by.values()) }
-        order_by = { group_name: orders[order_key] for group_name, order_key in order_by.items() }
         output_fonts = []
 
         for font in input_fonts:
@@ -251,12 +294,15 @@ class SubsetNode(Node):
             for char_code, glyph_name in font.font['cmap'].getBestCmap().items():
                 char = chr(char_code)
 
-                for group_name, group in group_by.items():
-                    inner_index = group(char)
+                for group_index, group in enumerate(group_by):
+                    inner_index = group['function'](char)
                     if inner_index is None:
                         continue
 
-                    group_key = (group_name, inner_index)
+                    if group['args'].get('merge_blocks', False):
+                        inner_index = 0
+
+                    group_key = (group_index, inner_index)
                     if group_key not in groups:
                         groups[group_key] = []
 
@@ -264,7 +310,7 @@ class SubsetNode(Node):
                     break
 
             for group_key, group_chars in list(groups.items()):
-                if len(group_chars) >= min_chunk_size:
+                if len(group_chars) >= group['args'].get('min_chunk_size', min_chunk_size):
                     continue
 
                 del groups[group_key]
@@ -274,15 +320,17 @@ class SubsetNode(Node):
 
                 groups[('merged_chunks', 0)].extend(group_chars)
 
-            for (group_name, inner_index), group_chars in list(groups.items()):
-                group_chars.sort(key=order_by[group_name])
+            for (group_index, inner_index), group_chars in list(groups.items()):
+                group = group_by[group_index]
+                group_chars.sort(key=group['order'])
 
                 i = 0
-                while len(group_chars) > max_chunk_size:
-                    groups[(group_name, inner_index, i)] = group_chars[:max_chunk_size]
+                group_max_chunk_size = group['args'].get('max_chunk_size', max_chunk_size)
+                while len(group_chars) > group_max_chunk_size:
+                    groups[(group_index, inner_index, i)] = group_chars[:group_max_chunk_size]
                     i += 1
 
-                    del group_chars[:max_chunk_size]
+                    del group_chars[:group_max_chunk_size]
 
             basename = path.basename(font['path'])
             dirname = path.dirname(font['path'])
