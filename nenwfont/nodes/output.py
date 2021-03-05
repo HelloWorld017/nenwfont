@@ -15,7 +15,7 @@ class OutputNode(Node):
         output_css = options['output_css']
         output_preview = options.get('output_preview', None)
         with_zopfli = options.get('with_zopfli', True)
-        extensions = options.get('extensions', [ 'woff', 'woff2' ])
+        extensions = options.get('extensions', [ 'woff2', 'woff' ])
         family_key = options.get('family_key', 'family_name')
 
         if with_zopfli:
@@ -67,10 +67,22 @@ class OutputNode(Node):
         with open("./assets/preview.template.html", encoding="utf-8") as f:
             template = f.read()
 
+        font_items = set([
+            (font.attributes.get('family_name'), font.attributes.get('full_name'), font.attributes.get('weight', 400))
+            for font in fonts
+        ])
+
         replace_map = {
             'title': "Generated at %s" % datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'stylesheet': posixpath.relpath(stylesheet_path, os.path.dirname(path)),
-            'fonts': json.dumps([ font['full_name'] for font in fonts ])
+            'fonts': json.dumps([
+                {
+                    'familyName': family_name,
+                    'name': full_name,
+                    'style': "font-family:%s;font-weight:%s;" % (family_name, weight)
+                }
+                for (family_name, full_name, weight) in font_items
+            ])
         }
 
         for key, value in replace_map.items():

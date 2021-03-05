@@ -74,7 +74,7 @@
 		<div
 			class="App"
 			x-data="app"
-			:style="`--default-font: '${fonts[0]}'`"
+			:style="`--default-font: '${fonts[0].familyName}'`"
 		>
 			<h1 class="App__title">Font Preview</h1>
 
@@ -93,9 +93,9 @@
 
 			<h2 class="App__section">Typefaces</h2>
 			<div class="App__typefaces">
-				<template x-for="name in fonts" :key="name">
-					<div class="Typeface" :style="`font-family: '${name}'`">
-						<h3 class="Typeface__name" x-text="name"></h3>
+				<template x-for="font in fonts" :key="font.name">
+					<div class="Typeface" :style="font.style">
+						<h3 class="Typeface__name" x-text="font.name"></h3>
 						<div class="Typeface__sample" x-text="sample" :style="`font-size: ${size}px`"></div>
 					</div>
 				</template>
